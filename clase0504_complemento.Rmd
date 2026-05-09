@@ -1,0 +1,444 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+# Cuando no usar tuberías en R
+
+En R, las tuberías `%>%`, provenientes del paquete `magrittr`, permiten escribir código de forma más clara cuando tenemos una secuencia de operaciones. Son especialmente útiles cuando queremos transformar un objeto paso a paso.
+
+Por ejemplo:
+
+```{r}
+library(magrittr)
+library(dplyr)
+
+mtcars %>%
+  select(mpg, cyl, hp) %>%
+  filter(hp > 100) %>%
+  arrange(desc(mpg))
+```
+
+Este código se lee casi como una oración:
+
+> Toma la base de datos `mtcars`, selecciona algunas columnas, filtra los autos con más de 100 caballos de fuerza y ordénalos de mayor a menor según `mpg`.
+
+Sin embargo, las tuberías no siempre son la mejor opción. Aunque son muy útiles, también pueden hacer que el código sea difícil de leer, depurar o mantener si se usan de forma incorrecta.
+
+---
+
+## 1. No usar tuberías cuando la cadena es demasiado larga
+
+Las tuberías funcionan muy bien cuando tenemos una secuencia corta y lineal de operaciones. Sin embargo, cuando una tubería tiene demasiados pasos, por ejemplo más de 10, el código puede volverse difícil de leer.
+
+### Ejemplo poco recomendable
+
+```{r}
+mtcars %>%
+  select(mpg, cyl, hp, wt, gear, carb) %>%
+  filter(hp > 100) %>%
+  mutate(rendimiento = mpg / hp) %>%
+  mutate(peso_potencia = wt / hp) %>%
+  group_by(cyl) %>%
+  summarise(
+    promedio_mpg = mean(mpg),
+    promedio_hp = mean(hp),
+    promedio_rendimiento = mean(rendimiento)
+  ) %>%
+  arrange(desc(promedio_rendimiento)) %>%
+  filter(promedio_hp > 120)
+```
+
+El código funciona, pero empieza a ser difícil de seguir. Si hay un error, puede ser complicado saber en qué paso ocurrió.
+
+### Mejor alternativa
+
+Es preferible crear objetos intermedios con nombres significativos.
+
+```{r}
+autos_seleccionados <- mtcars %>%
+  select(mpg, cyl, hp, wt, gear, carb)
+
+autos_filtrados <- autos_seleccionados %>%
+  filter(hp > 100)
+
+autos_con_variables <- autos_filtrados %>%
+  mutate(
+    rendimiento = mpg / hp,
+    peso_potencia = wt / hp
+  )
+
+resumen_por_cilindros <- autos_con_variables %>%
+  group_by(cyl) %>%
+  summarise(
+    promedio_mpg = mean(mpg),
+    promedio_hp = mean(hp),
+    promedio_rendimiento = mean(rendimiento)
+  )
+
+resultado_final <- resumen_por_cilindros %>%
+  arrange(desc(promedio_rendimiento)) %>%
+  filter(promedio_hp > 120)
+
+resultado_final
+```
+
+Esta versión es más larga, pero más clara. Además, permite revisar cada objeto intermedio si algo sale mal.
+
+---
+
+## 2. No usar tuberías cuando hay múltiples entradas importantes
+
+Las tuberías funcionan mejor cuando hay un objeto principal que se va transformando. Por ejemplo, una base de datos que se filtra, se ordena y se resume.
+
+Pero si tenemos dos o más objetos igual de importantes, la tubería puede ser confusa.
+
+### Ejemplo
+
+Supongamos que tenemos dos tablas:
+
+```{r}
+estudiantes <- data.frame(
+  id = c(1, 2, 3),
+  nombre = c("Ana", "Luis", "Marta")
+)
+
+notas <- data.frame(
+  id = c(1, 2, 3),
+  nota = c(8, 9, 7)
+)
+```
+
+Podríamos escribir:
+
+```{r}
+estudiantes %>%
+  left_join(notas, by = "id")
+```
+
+Este ejemplo todavía es aceptable, porque `estudiantes` es claramente la tabla principal.
+
+Pero si las dos tablas tienen la misma importancia, puede ser más claro escribir:
+
+```{r}
+tabla_final <- left_join(estudiantes, notas, by = "id")
+
+tabla_final
+```
+
+En este caso, se ve explícitamente que estamos combinando dos tablas.
+
+---
+
+## 3. No usar tuberías cuando el proceso no es lineal
+
+Las tuberías son lineales. Esto significa que el resultado de un paso pasa directamente al siguiente.
+
+La estructura general es:
+
+```{r, eval=FALSE}
+objeto %>%
+  paso_1() %>%
+  paso_2() %>%
+  paso_3()
+```
+
+Esto es útil cuando el proceso tiene una sola dirección.
+
+Sin embargo, algunos problemas no son lineales. A veces necesitamos crear varias ramas, combinar resultados o usar varios objetos intermedios.
+
+### Ejemplo
+
+Supongamos que queremos:
+
+1. Filtrar autos con alta potencia.
+2. Filtrar autos con bajo consumo.
+3. Comparar ambos grupos.
+4. Calcular resúmenes separados.
+
+Esto no es una sola cadena lineal. Es mejor separarlo.
+
+```{r}
+autos_alta_potencia <- mtcars %>%
+  filter(hp > 150)
+
+autos_bajo_consumo <- mtcars %>%
+  filter(mpg < 20)
+
+resumen_potencia <- autos_alta_potencia %>%
+  summarise(
+    promedio_hp = mean(hp),
+    promedio_mpg = mean(mpg)
+  )
+
+resumen_consumo <- autos_bajo_consumo %>%
+  summarise(
+    promedio_hp = mean(hp),
+    promedio_mpg = mean(mpg)
+  )
+
+resumen_potencia
+resumen_consumo
+```
+
+Aquí sería confuso intentar escribir todo en una sola tubería, porque realmente tenemos varios caminos de análisis.
+
+---
+
+## 4. No usar tuberías si dificultan la depuración
+
+Depurar significa encontrar y corregir errores en el código.
+
+Cuando usamos una tubería muy larga, si ocurre un error, puede ser difícil identificar exactamente en qué paso está el problema.
+
+### Ejemplo
+
+```{r, eval=FALSE}
+mtcars %>%
+  select(mpg, cyl, hp) %>%
+  filter(potencia > 100) %>%
+  arrange(desc(mpg))
+```
+
+Este código genera error porque la columna `potencia` no existe.
+
+Una forma más fácil de depurar es separar el código:
+
+```{r}
+datos_1 <- mtcars %>%
+  select(mpg, cyl, hp)
+
+datos_2 <- datos_1 %>%
+  filter(hp > 100)
+
+datos_3 <- datos_2 %>%
+  arrange(desc(mpg))
+
+datos_3
+```
+
+Ahora podemos revisar `datos_1`, `datos_2` y `datos_3` por separado.
+
+---
+
+## 5. No usar tuberías cuando el código pierde claridad
+
+El objetivo de usar tuberías es escribir código más claro. Si una tubería hace que el código sea más difícil de entender, entonces no conviene usarla.
+
+Por ejemplo, esta tubería puede ser confusa para alguien que está empezando:
+
+```{r}
+mtcars %>%
+  split(.$cyl) %>%
+  lapply(function(x) {
+    mean(x$mpg)
+    })
+```
+
+Aunque el código es correcto, tal vez sea más claro escribirlo paso a paso:
+
+```{r}
+autos_por_cilindros <- split(mtcars, mtcars$cyl)
+
+promedios_mpg <- lapply(autos_por_cilindros, function(x) {
+  mean(x$mpg)
+})
+
+promedios_mpg
+```
+
+La segunda versión ayuda a entender qué está ocurriendo.
+
+---
+
+# Resumen
+
+No conviene usar tuberías cuando:
+
+1. La cadena de operaciones es demasiado larga.
+2. Hay varios objetos de entrada igual de importantes.
+3. El proceso no es lineal.
+4. Se dificulta la depuración.
+5. El código se vuelve menos claro.
+
+La regla principal es:
+
+> Usa tuberías cuando ayuden a leer mejor el código.  
+> No las uses cuando hagan que el código sea más difícil de entender.
+
+---
+
+# Ejercicios
+
+
+## Ejercicio 1
+
+El siguiente código usa una tubería larga. Reescríbelo usando objetos intermedios con nombres significativos.
+
+```{r}
+mtcars %>%
+  select(mpg, cyl, hp, wt) %>%
+  filter(hp > 100) %>%
+  mutate(rendimiento = mpg / hp) %>%
+  group_by(cyl) %>%
+  summarise(promedio = mean(rendimiento)) %>%
+  arrange(desc(promedio))
+```
+
+
+### Resolución
+```{r}
+carros <- mtcars %>%
+  select(mpg, cyl, hp, wt)
+
+carros_filtrados <- carros %>%
+  filter(hp > 100)
+
+carro_variable <- carros_filtrados %>%
+  mutate(rendimiento = mpg / hp)
+
+resumen_carros <- carro_variable %>%
+  group_by(cyl) %>%
+  summarise(
+    promedio = mean(rendimiento)
+  ) %>%
+  arrange(desc(promedio))
+
+resumen_carros
+```
+
+
+
+---
+
+## Ejercicio 2
+
+Explica por qué la siguiente tubería puede ser difícil de depurar.
+
+```{r, eval=FALSE}
+mtcars %>%
+  select(mpg, cyl, hp) %>%
+  filter(potencia > 100) %>%
+  arrange(desc(mpg))
+```
+
+### Respuesta
+
+La tuberia puede ser dificil de depurar ya que al ocurrir un error, este podría ser "difícil" de encontrar.
+En este caso, al ser una secuencia corta, no es dificil de depurar ya que solo se tiene tres opciones donde pudo haber fallado, sin embargo, el ir parte por parte puede quitar tiempo.
+
+---
+
+## Ejercicio 3
+
+Corrige el siguiente código y reescríbelo de forma que sea más fácil revisar cada paso.
+
+```{r, eval=FALSE}
+mtcars %>%
+  select(mpg, cyl, hp) %>%
+  mutate(relacion = millas / hp) %>%
+  arrange(desc(relacion))
+```
+
+### Solución
+```{r}
+base_carros <- mtcars
+
+seleccion_variables <- base_carros %>%
+  select(mpg, cyl, hp)
+
+nueva_variable <- seleccion_variables %>%
+  mutate(relacion = millas / hp)
+
+arreglo_orden <- nueva_variable %>%
+  arrange(desc(relacion))
+
+arreglo_orden
+```
+
+---
+
+## Ejercicio 4
+
+Decide si conviene o no usar tuberías en el siguiente caso. Justifica tu respuesta.
+
+Queremos:
+
+1. Tomar `iris`.
+2. Seleccionar `Sepal.Length`, `Sepal.Width` y `Species`.
+3. Filtrar las flores de la especie `setosa`.
+4. Ordenar de mayor a menor según `Sepal.Length`.
+
+### Solución
+
+Si es conveniente, ya que en este caso, el orden en el que se realizaran las peticiones son ordenados y consecutivos, además de ser pocos.
+
+
+---
+
+## Ejercicio 5
+
+Decide si conviene o no usar una sola tubería para este análisis.
+
+Queremos:
+
+1. Crear un grupo de autos con `hp > 150`.
+2. Crear otro grupo de autos con `mpg > 25`.
+3. Calcular un resumen para cada grupo.
+4. Comparar los resultados.
+
+### Solución
+
+No, no es conveniente usar una sola tuberia ya que los que se solicita no es algo lineal, se debe crear objetos intermedios, por la creación de dos grupos distintos.
+
+---
+
+## Ejercicio 6
+
+El siguiente código tiene muchas operaciones. Reescríbelo usando objetos intermedios.
+
+```{r}
+iris %>%
+  select(Sepal.Length, Sepal.Width, Petal.Length, Petal.Width, Species) %>%
+  filter(Sepal.Length > 5) %>%
+  mutate(
+    razon_sepalo = Sepal.Length / Sepal.Width,
+    razon_petalo = Petal.Length / Petal.Width
+  ) %>%
+  group_by(Species) %>%
+  summarise(
+    promedio_sepalo = mean(razon_sepalo),
+    promedio_petalo = mean(razon_petalo)
+  ) %>%
+  arrange(desc(promedio_petalo))
+```
+
+### Solución
+```{r}
+flores <- iris %>%
+  select(Sepal.Length, Sepal.Width, Petal.Length, Petal.Width, Species)
+
+filtrado <- flores %>% 
+   filter(Sepal.Length > 5)
+
+nuevas_variables <- filtrado %>%  
+  mutate(
+    razon_sepalo = Sepal.Length / Sepal.Width,
+    razon_petalo = Petal.Length / Petal.Width
+  )
+
+agrupado <- nuevas_variables %>%  
+  group_by(Species)
+
+promedios <- agrupado %>%
+  summarise(
+    promedio_sepalo = mean(razon_sepalo),
+    promedio_petalo = mean(razon_petalo)
+  ) %>%
+   arrange(desc(promedio_petalo))
+
+promedios
+```
+
+
+

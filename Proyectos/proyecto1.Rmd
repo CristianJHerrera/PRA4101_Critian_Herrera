@@ -1,0 +1,120 @@
+---
+title: "Proyecto 1"
+author: "Cristian Josue Herrera"
+date: "2026-05-16"
+output: pdf_document
+---
+
+```{r, echo = FALSE}
+library(ggplot2)
+diamonds
+
+library(dplyr)
+library(magrittr)
+```
+
+El equipo comercial de una tienda de diamantes sospecha que algunos diamantes tienen precios inusualmente altos en relación con el peso. Por lo tanto, el presente análisis busca identificar estos productos de alto costo, calcular indicadores de precios y resumir la información por la calidad de corte.
+
+Para este análisis utilizamos la base de datos *diamonds*, incluida en el paquete *ggplot2*. Esta base contiene información sobre diamantes y algunas de sus caraterísticas físicas y comerciales.Algunas de sus columnas principales son:
+
+-   **price**: precios del diamante en dolares estadounidense.
+
+-   **carat:** peso del diamante en quilates, donde un mayor valor indica un diamante mas grande.
+
+-   **cut:** calidad del corte, una variable categórica de jerarquía (*Fair, Good, Very Good, Premium, Ideal*).
+
+-   **color:** color del diamante.
+
+-   **clarity:** claridad del diamante, describe las imperfecciones de la piedra.
+
+Al analizar el valor de un diamante, el precio total no es una métrica suficiente para realizar comparaciones justas entre distintas joyas. Esto se debe a que el precio no aumenta de manera lineal con el peso, un diamante puede tener un precio alto simplemente porque es muy pesado y no necesariamente por su calidad óptica (corte, color, claridad) sea superior.
+
+Por eso vamos a construir una variable que mide el precio del diamante en relación con su peso. Además crearemos una nueva variable para clasificar si los precios son muy altos o no; utilizaremos la clasificación por cuantiles.
+
+```{r}
+diamantes <- diamonds %>%
+  mutate(precio_por_quilate = price / carat)
+
+#Clasificación de precios
+precio_muy_alto <- quantile(diamantes$precio_por_quilate, probs = 0.95)
+precio_alto <- quantile(diamantes$precio_por_quilate, probs = 0.75)
+precio_medio <- quantile(diamantes$precio_por_quilate, probs = 0.5)
+
+clasificacion <- diamantes %>%
+  mutate(clasificacion_precio = case_when(
+    precio_por_quilate >= precio_muy_alto ~ "Muy Alto",
+    precio_por_quilate >= precio_alto ~ "Alto",
+    precio_por_quilate >= precio_medio ~ "Medio",
+    TRUE ~ "Bajo"
+  ))
+
+```
+
+Veamos una inspección intermedia de la tabla:
+
+```{r}
+clasificacion %>%
+  select(price, carat, cut, precio_por_quilate, clasificacion_precio) %>%
+  head(10)
+```
+
+Ahora agrupamos los datos por la variable **cut**, para resumir la información.
+
+```{r}
+resumen <- clasificacion %>%
+  group_by(cut) %>%
+  summarise(
+    precio_medio = mean(price),
+    precio_medio_quilate = mean(precio_por_quilate),
+    diamantes_muy_caros = sum(clasificacion_precio == "Muy Alto"),
+    diamantes_caros = sum(clasificacion_precio == "Alto"),
+    total = n()
+  ) %>%
+  arrange(desc(precio_medio_quilate))
+
+knitr::kable(resumen,
+             caption = "Resumen por Calidad de corte")
+
+
+```
+
+Al evaluar el precio total absoluto, el corte que representa mayor promedio es el **Premium**, seguido de cerca por el corte **Fair.**
+
+Mientras que al ajustar el precio en relación al peso de la gema, se observa que el corte **Premium** sigue teniendo mayor promedio, pero en este caso es seguido por el corte **Very Good.**
+
+```{r}
+cantidad_total <- resumen %>%
+  select(diamantes_muy_caros, diamantes_caros) %>%
+  summarise(
+    total_diamantes_muy_caros = sum(diamantes_muy_caros),
+    total_diamantes_caros = sum(diamantes_caros)
+  )
+
+cantidad_total
+
+```
+
+Dado que para la clasificación se ha realizado por percentiles, podemos observar que hay un total de 2697 diamantes están clasificados con un precio *"Muy Caro"*, y 10 788 diamantes están etiquetados como diamantes con precio *"Caro"*, de un total de 53 940 diamantes.
+
+Además identificamos que el corte **Ideal** tiene la mayor cantidad de diamantes clasificado con un precio "Muy Caro", seguido por el corte **Premium**, además en la clasificación de precio *"Caro"*, se tiene que los mismos corten tienen mayor cantidad de diamantes.
+
+Sin embargo, esto podría deberse en gran medida que el ambos cortes tienen la mayor cantidad de diamantes; asi que realizamos lo siguiente:
+
+```{r}
+porcentajes <- resumen %>%
+  select(cut, diamantes_muy_caros, diamantes_caros, total) %>%
+  mutate(
+    porcentaje_muy_caros = round((diamantes_muy_caros / total)*100, 2),
+    porcentaje_caros = round((diamantes_caros / total)*100, 2)
+  ) 
+
+porcentajes <- porcentajes %>%
+  group_by(cut) %>%
+  select(porcentaje_muy_caros, porcentaje_caros) %>%
+  arrange(desc(porcentaje_muy_caros))
+porcentajes
+```
+
+Observamos que los cortes que tienen un precio *"Muy Caro"* porcentualmente siguen siendo los mismos, con muy poca diferencia entre ellos. Al observar porcentualmente los que están catalogados con precio *"Caro"*, el corte **Premium** es ahora el mas alto y es seguido por el corte **Very Good**.
+
+Podemos concluir que, aunque en cantidad son muchos, son porcentualmente muy pocos los que están catalogados con precios *"Caros"* o *"Muy Caros"*.

@@ -1,0 +1,692 @@
+---
+title: 'Unidad III: Variantes de los bucles `for` y funciones de orden superior'
+author: "Cristian J. Herrera"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: '3'
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r setup, message=FALSE, warning=FALSE}
+library(dplyr)
+library(purrr)
+library(tibble)
+```
+
+# Introducción
+
+En ciencia de datos es muy común repetir una misma operación sobre varios elementos:
+
+- aplicar una transformación a varias columnas de una tabla;
+- calcular una medida resumen para muchas variables;
+- ajustar el mismo modelo a distintos subconjuntos de datos;
+- leer muchos archivos y combinarlos en una sola base;
+- generar simulaciones bajo distintos parámetros.
+
+Una primera forma de resolver este tipo de tareas es usar un bucle `for`. Sin embargo, cuando los patrones de repetición se vuelven frecuentes, también conviene conocer las **funciones de orden superior**, es decir, funciones que reciben otra función como argumento.
+
+En esta guía estudiaremos dos temas:
+
+1. Variantes de los bucles `for`.
+2. Bucles versus funciones de orden superior.
+
+La idea central es aprender a reconocer patrones de iteración y escribir código más claro, ordenado y reutilizable.
+
+# 1. Variantes de los bucles `for`
+
+Un bucle `for` permite ejecutar un bloque de código varias veces. En general, un bucle tiene tres componentes importantes:
+
+1. **Salida**: el objeto donde se guardará el resultado.
+2. **Secuencia**: los valores sobre los que se va a iterar.
+3. **Cuerpo**: el código que se ejecuta en cada iteración.
+
+Por ejemplo, si queremos calcular la media de cada columna de `mtcars`, podemos escribir:
+
+```{r}
+salida <- vector("double", ncol(mtcars))
+
+for (i in seq_along(mtcars)) {
+  salida[[i]] <- mean(mtcars[[i]])
+}
+
+salida
+```
+
+En este código:
+
+- `salida <- vector("double", ncol(mtcars))` crea un vector numérico donde se guardarán los resultados.
+- `seq_along(mtcars)` genera una secuencia segura de índices para recorrer las columnas.
+- `mtcars[[i]]` extrae la columna número `i`.
+- `mean(mtcars[[i]])` calcula la media de esa columna.
+- `salida[[i]] <- ...` guarda el resultado.
+
+Es recomendable usar `seq_along()` en lugar de expresiones como `1:length(x)`, porque `seq_along()` funciona correctamente incluso si el objeto tiene longitud cero.
+
+## 1.1 Modificar un objeto existente
+
+No siempre queremos crear un objeto nuevo. A veces queremos modificar un objeto que ya existe.
+
+Por ejemplo, supongamos que queremos reescalar cada columna numérica de un data frame al intervalo `[0, 1]`.
+
+Primero definimos una función:
+
+```{r}
+reescalar_01 <- function(x) {
+  rango <- range(x, na.rm = TRUE)
+  (x - rango[1]) / (rango[2] - rango[1])
+}
+```
+
+Ahora creamos un pequeño data frame:
+
+```{r}
+set.seed(123)
+
+df <- tibble(
+  a = rnorm(10),
+  b = rnorm(10),
+  c = rnorm(10)
+)
+
+df
+```
+
+Podemos modificar cada columna usando un bucle `for`:
+
+```{r}
+for (i in seq_along(df)) {
+  df[[i]] <- reescalar_01(df[[i]])
+}
+
+df
+```
+
+En este caso:
+
+- la salida ya existe: es el mismo objeto `df`;
+- la secuencia es `seq_along(df)`;
+- el cuerpo aplica `reescalar_01()` a cada columna.
+
+Es importante usar `[[ ]]` cuando queremos extraer o modificar una sola columna. En un data frame, `df[[i]]` devuelve la columna como vector, mientras que `df[i]` devuelve un data frame con una columna.
+
+## 1.2 Iterar sobre índices, valores o nombres
+
+Hay tres formas comunes de recorrer un objeto con un bucle `for`.
+
+### 1.2.1 Iterar sobre índices
+
+Esta es la forma más general.
+
+```{r}
+x <- list(a = 1:5, b = 10:15, c = 20:25)
+
+salida <- vector("double", length(x))
+
+for (i in seq_along(x)) {
+  salida[[i]] <- mean(x[[i]])
+}
+
+salida
+```
+
+Si queremos conservar los nombres:
+
+```{r}
+names(salida) <- names(x)
+salida
+```
+
+La ventaja de iterar sobre índices es que podemos acceder tanto al valor como al nombre:
+
+```{r}
+for (i in seq_along(x)) {
+  nombre <- names(x)[[i]]
+  valor <- x[[i]]
+
+  print(paste("El promedio de", nombre, "es", mean(valor)))
+}
+```
+
+### 1.2.2 Iterar sobre valores
+
+También podemos iterar directamente sobre los elementos.
+
+```{r}
+for (valor in x) {
+  print(mean(valor))
+}
+```
+
+Esta forma es útil cuando solo queremos imprimir algo, graficar o producir un efecto secundario. Sin embargo, si necesitamos guardar resultados, suele ser más cómodo iterar sobre índices.
+
+### 1.2.3 Iterar sobre nombres
+
+Si el objeto tiene nombres, podemos recorrerlos directamente.
+
+```{r}
+for (nombre in names(x)) {
+  print(paste("Nombre:", nombre))
+  print(mean(x[[nombre]]))
+}
+```
+
+Esta forma es útil cuando el nombre se necesita dentro del bucle, por ejemplo, para escribir títulos de gráficos o nombres de archivos.
+
+## 1.3 Salidas de longitud desconocida
+
+A veces no sabemos de antemano qué longitud tendrá la salida.
+
+Por ejemplo, imaginemos que queremos generar vectores normales de diferentes longitudes aleatorias.
+
+Una mala práctica sería hacer crecer un vector en cada iteración:
+
+```{r}
+set.seed(123)
+
+medias <- c(0, 1, 2)
+salida <- double()
+
+for (i in seq_along(medias)) {
+  n <- sample(1:10, 1)
+  salida <- c(salida, rnorm(n, mean = medias[[i]]))
+}
+
+salida
+```
+
+Este código funciona, pero no es eficiente. Cada vez que usamos `c()` para agregar valores, R tiene que crear una copia del objeto anterior y pegarle el nuevo resultado.
+
+Una mejor estrategia es guardar cada resultado en una lista y combinar todo al final:
+
+```{r}
+set.seed(123)
+
+medias <- c(0, 1, 2)
+salida_lista <- vector("list", length(medias))
+
+for (i in seq_along(medias)) {
+  n <- sample(1:10, 1)
+  salida_lista[[i]] <- rnorm(n, mean = medias[[i]])
+}
+
+salida_lista
+```
+
+Luego podemos combinar los resultados:
+
+```{r}
+unlist(salida_lista)
+```
+
+La misma idea se aplica cuando se quieren combinar muchas tablas. En lugar de usar `rbind()` dentro del bucle, conviene guardar las tablas en una lista y después usar `bind_rows()`.
+
+Ejemplo:
+
+```{r}
+tablas <- vector("list", 3)
+
+for (i in 1:3) {
+  tablas[[i]] <- tibble(
+    grupo = i,
+    valor = rnorm(5)
+  )
+}
+
+bind_rows(tablas)
+```
+
+## 1.4 Secuencias de longitud desconocida: bucles `while`
+
+Un bucle `for` se usa cuando sabemos cuántas veces queremos repetir una acción. Pero hay casos donde no sabemos cuántas repeticiones serán necesarias.
+
+Por ejemplo: ¿cuántos lanzamientos de una moneda se necesitan para obtener tres caras seguidas?
+
+En este caso conviene usar un bucle `while`.
+
+```{r}
+set.seed(123)
+
+lanzar <- function() {
+  sample(c("cara", "cruz"), 1)
+}
+
+lanzamientos <- 0
+caras_seguidas <- 0
+
+while (caras_seguidas < 3) {
+  resultado <- lanzar()
+
+  if (resultado == "cara") {
+    caras_seguidas <- caras_seguidas + 1
+  } else {
+    caras_seguidas <- 0
+  }
+
+  lanzamientos <- lanzamientos + 1
+}
+
+lanzamientos
+```
+
+La estructura general de un bucle `while` es:
+
+```{r, eval=FALSE}
+while (condicion) {
+  # cuerpo del bucle
+}
+```
+
+El cuerpo se ejecuta mientras la condición sea verdadera.
+
+Un bucle `while` es más general que un bucle `for`, porque puede usarse cuando no se conoce de antemano el número de iteraciones. Sin embargo, debe usarse con cuidado: si la condición nunca se vuelve falsa, se produce un bucle infinito.
+
+# 2. Bucles versus funciones de orden superior
+
+R permite trabajar con funciones como si fueran objetos. Eso significa que una función puede recibir otra función como argumento.
+
+Este es el principio detrás de muchas funciones de iteración, como `map()`, `map_dbl()`, `map_chr()` y también funciones base como `lapply()`.
+
+## 2.1 El problema de repetir bucles similares
+
+Supongamos que tenemos este data frame:
+
+```{r}
+set.seed(123)
+
+df <- tibble(
+  a = rnorm(10),
+  b = rnorm(10),
+  c = rnorm(10),
+  d = rnorm(10)
+)
+
+df
+```
+
+Queremos calcular la media de cada columna:
+
+```{r}
+salida <- vector("double", length(df))
+
+for (i in seq_along(df)) {
+  salida[[i]] <- mean(df[[i]])
+}
+
+salida
+```
+
+Ahora supongamos que queremos calcular la mediana:
+
+```{r}
+salida <- vector("double", length(df))
+
+for (i in seq_along(df)) {
+  salida[[i]] <- median(df[[i]])
+}
+
+salida
+```
+
+Y luego la desviación estándar:
+
+```{r}
+salida <- vector("double", length(df))
+
+for (i in seq_along(df)) {
+  salida[[i]] <- sd(df[[i]])
+}
+
+salida
+```
+
+El patrón es casi idéntico. Lo único que cambia es la función aplicada a cada columna: `mean`, `median` o `sd`.
+
+## 2.2 Crear una función que recibe otra función
+
+Podemos generalizar el patrón anterior creando una función que reciba dos argumentos:
+
+- un data frame;
+- una función resumen.
+
+```{r}
+resumen_columnas <- function(df, funcion) {
+  salida <- vector("double", length(df))
+
+  for (i in seq_along(df)) {
+    salida[[i]] <- funcion(df[[i]])
+  }
+
+  names(salida) <- names(df)
+  salida
+}
+```
+
+Ahora podemos usar la misma función para distintos resúmenes:
+
+```{r}
+resumen_columnas(df, mean)
+```
+
+```{r}
+resumen_columnas(df, median)
+```
+
+```{r}
+resumen_columnas(df, sd)
+```
+
+Esta es una función de orden superior porque recibe otra función como argumento.
+
+## 2.3 ¿Por qué esto es útil?
+
+El beneficio principal no es necesariamente la velocidad, sino la claridad y la reducción de duplicación.
+
+En lugar de tener tres funciones distintas:
+
+```{r, eval=FALSE}
+resumen_media <- function(df) { ... }
+resumen_mediana <- function(df) { ... }
+resumen_sd <- function(df) { ... }
+```
+
+podemos tener una sola función general:
+
+```{r, eval=FALSE}
+resumen_columnas(df, funcion)
+```
+
+Esto hace que el código sea más fácil de mantener. Si hay que cambiar la forma en que se recorren las columnas, solo se cambia en un lugar.
+
+## 2.4 Aplicar la función solo a columnas numéricas
+
+En la práctica, muchos data frames tienen columnas numéricas y no numéricas. Por ejemplo:
+
+```{r}
+iris %>% glimpse()
+```
+
+Si intentamos calcular la media de todas las columnas de `iris`, tendremos problemas porque `Species` es una variable categórica.
+
+Podemos adaptar nuestra función para trabajar solo con columnas numéricas.
+
+```{r}
+resumen_numericas <- function(df, funcion) {
+  es_numerica <- map_lgl(df, is.numeric)
+  df_num <- df[es_numerica]
+
+  salida <- vector("double", length(df_num))
+
+  for (i in seq_along(df_num)) {
+    salida[[i]] <- funcion(df_num[[i]])
+  }
+
+  names(salida) <- names(df_num)
+  salida
+}
+```
+
+Ahora sí podemos aplicar la función a `iris`:
+
+```{r}
+resumen_numericas(iris, mean)
+```
+
+```{r}
+resumen_numericas(iris, sd)
+```
+
+## 2.5 Relación con `purrr::map()`
+
+El paquete `purrr` ofrece una familia de funciones que encapsulan patrones comunes de bucles `for`.
+
+Por ejemplo, este código:
+
+```{r}
+salida <- vector("double", length(df))
+
+for (i in seq_along(df)) {
+  salida[[i]] <- mean(df[[i]])
+}
+
+salida
+```
+
+puede escribirse de forma más compacta así:
+
+```{r}
+map_dbl(df, mean)
+```
+
+La función `map_dbl()`:
+
+- recorre cada elemento de `df`;
+- aplica `mean()` a cada columna;
+- devuelve un vector de tipo `double`.
+
+También podemos usar:
+
+```{r}
+map_dbl(df, median)
+```
+
+```{r}
+map_dbl(df, sd)
+```
+
+La familia de funciones `map_*()` se distingue por el tipo de salida:
+
+| Función | Tipo de salida |
+|---|---|
+| `map()` | Lista |
+| `map_lgl()` | Vector lógico |
+| `map_int()` | Vector entero |
+| `map_dbl()` | Vector numérico tipo double |
+| `map_chr()` | Vector de texto |
+
+Por ejemplo:
+
+```{r}
+map_chr(iris, class)
+```
+
+```{r}
+map_lgl(iris, is.numeric)
+```
+
+```{r}
+map_int(iris, n_distinct)
+```
+
+## 2.6 ¿Cuándo usar `for` y cuándo usar funciones de orden superior?
+
+Usar un bucle `for` es una buena opción cuando:
+
+- estamos aprendiendo a programar;
+- queremos ver claramente cada paso de la iteración;
+- necesitamos modificar un objeto de forma muy específica;
+- el proceso tiene muchas instrucciones dentro de cada iteración.
+
+Usar una función de orden superior es conveniente cuando:
+
+- aplicamos la misma operación a muchos elementos;
+- queremos reducir duplicación de código;
+- necesitamos que el código sea más compacto;
+- el patrón de iteración es sencillo y repetitivo.
+
+No se trata de que una opción sea siempre mejor que la otra. Lo importante es elegir la herramienta que haga el código más claro.
+
+# 3. Ejercicios con soluciones
+
+## Ejercicio 1
+
+Usa la base de datos `mtcars`. Calcula, con un bucle `for`, la media de cada columna. Guarda los resultados en un vector numérico con nombres.
+
+```{r}
+medias <- vector("double", ncol(mtcars))
+
+for (columna in seq_along(mtcars)) {
+  medias[[columna]] <- mean(mtcars[[columna]])
+}
+
+names(medias) <- names(mtcars)
+medias
+
+```
+
+## Ejercicio 2
+
+Usa la base de datos `iris`. Con un bucle `for`, determina qué columnas son numéricas. Guarda el resultado en un vector lógico con nombres.
+
+
+```{r}
+es_numerica <- vector( , ncol(iris))
+
+for (columna in seq_along(iris)) {
+  es_numerica <- map_lgl(iris, is.numeric)
+}
+
+es_numerica
+
+```
+
+## Ejercicio 3
+
+Usa la base de datos `iris`. Con un bucle `for`, calcula la desviación estándar únicamente de las columnas numéricas.
+
+```{r}
+
+desviacion <- vector("double", ncol(iris))
+
+for (columna in seq_along(iris)) {
+  ifelse(
+    is.numeric(iris[[columna]]) == TRUE,
+    desviacion[[columna]] <- sd(iris[[columna]]),
+    NA
+  )
+  
+}
+
+desviacion
+```
+
+## Ejercicio 4
+
+Crea una función llamada `resumen_columnas()` que reciba un data frame y una función. La función debe aplicar la función dada a cada columna del data frame.
+
+Prueba tu función con `mean`, `median` y `sd` usando `mtcars`.
+
+```{r}
+resumen_columnas <- function(df, funcion) {
+  salida <- vector("double", length(df))
+
+  for (i in seq_along(df)) {
+    salida[[i]] <- funcion(df[[i]])
+  }
+
+  names(salida) <- names(df)
+  salida
+}
+
+```
+
+## Ejercicio 5
+
+Adapta la función anterior para que trabaje únicamente con columnas numéricas. Pruébala con `iris`.
+
+```{r}
+resumen_numericas <- function(df, funcion) {
+  es_numerica <- map_lgl(df, is.numeric)
+  df_num <- df[es_numerica]
+
+  salida <- vector("double", length(df_num))
+
+  for (i in seq_along(df_num)) {
+    salida[[i]] <- funcion(df_num[[i]])
+  }
+
+  names(salida) <- names(df_num)
+  salida
+}
+
+resumen_numericas(iris, mean)
+```
+
+## Ejercicio 6
+
+Genera 10 números aleatorios normales para cada una de las siguientes medias: `-10`, `0`, `10` y `100`. Usa un bucle `for` y guarda los resultados en una lista.
+
+```{r}
+set.seed(22)
+medias <- c(-10, 0, 10, 100)
+numeros <- vector("list", 4)
+
+for (i in seq_along(medias)) {
+  numeros[[i]] <- rnorm(10, mean = medias[i])
+}
+
+names(numeros) <- paste0("media = ", medias)
+
+numeros
+```
+
+## Ejercicio 7
+
+Reescribe el ejercicio anterior usando `map()`.
+
+```{r}
+set.seed(22)
+medias <- c(-10, 0, 10, 100)
+
+numeros <- map(medias, ~ rnorm(10, mean = .))
+
+names(numeros) <- paste0("media_", medias)
+numeros
+```
+
+## Ejercicio 8
+
+Usa `map_dbl()` para calcular la media de cada columna de `mtcars`.
+
+```{r}
+map_dbl(mtcars, mean)
+```
+
+## Ejercicio 9
+
+Usa `map_chr()` para obtener la clase de cada columna de `iris`.
+
+```{r}
+map_chr(iris, class)
+```
+
+## Ejercicio 10
+
+Usa un bucle `while` para simular lanzamientos de una moneda hasta obtener dos caras seguidas. El resultado final debe ser el número de lanzamientos necesarios.
+
+```{r}
+lanzar <- function() {
+  sample(c("cara", "corona"), 1)
+}
+
+lanzamientos <- 0
+caras_seguidas <- 0
+
+while (caras_seguidas < 2) {
+  resultado <- lanzar()
+
+  if (resultado == "cara") {
+    caras_seguidas <- caras_seguidas + 1
+  } else {
+    caras_seguidas <- 0
+  }
+
+  lanzamientos <- lanzamientos + 1
+}
+
+lanzamientos
+```
+

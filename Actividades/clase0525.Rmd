@@ -1,0 +1,759 @@
+---
+title: 'Unidad III: Funciones map y manejo de errores en iteraciones'
+author: "Cristian J. Herrera"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: '3'
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r setup, message=FALSE, warning=FALSE}
+library(purrr)
+library(dplyr)
+library(tibble)
+```
+
+# Introducción
+
+En los temas anteriores estudiamos los bucles `for` y las funciones de orden superior. Vimos que muchas tareas de programación consisten en repetir una misma operación sobre muchos elementos.
+
+Por ejemplo:
+
+- calcular la media de muchas columnas;
+- obtener la clase de cada variable;
+- contar valores únicos en cada columna;
+- aplicar una función a cada elemento de una lista;
+- ajustar varios modelos;
+- generar muchas simulaciones.
+
+En este documento estudiaremos dos temas importantes:
+
+1. Las funciones `map`.
+2. Manejo de errores al iterar.
+
+Las funciones `map()` pertenecen al paquete `purrr` y permiten escribir iteraciones de una forma más compacta y clara. Además, veremos cómo evitar que un error en una sola iteración detenga todo el proceso.
+
+# 1. Las funciones `map`
+
+La idea principal de `map()` es sencilla:
+
+> aplicar una función a cada elemento de un objeto.
+
+Por ejemplo, si tenemos varias columnas en una base de datos, podemos aplicar la misma función a cada columna.
+
+Consideremos la base de datos `mtcars`.
+
+```{r}
+head(mtcars)
+```
+
+Supongamos que queremos calcular la media de cada columna. Con un bucle `for`, podríamos escribir:
+
+```{r}
+salida <- vector("double", length(mtcars))
+names(salida) <- names(mtcars)
+
+for (i in seq_along(mtcars)) {
+  salida[[i]] <- mean(mtcars[[i]])
+}
+
+salida
+```
+
+La misma tarea puede escribirse con `map_dbl()`:
+
+```{r}
+map_dbl(mtcars, mean)
+```
+
+La instrucción anterior significa:
+
+> toma cada columna de `mtcars`, aplícale la función `mean()` y devuelve un vector numérico.
+
+## 1.1 La familia de funciones `map`
+
+El paquete `purrr` tiene varias versiones de `map()`. La diferencia principal entre ellas es el tipo de salida que devuelven.
+
+| Función | Tipo de salida |
+|---|---|
+| `map()` | Lista |
+| `map_lgl()` | Vector lógico |
+| `map_int()` | Vector entero |
+| `map_dbl()` | Vector numérico tipo double |
+| `map_chr()` | Vector de texto |
+
+La estructura general es:
+
+```{r, eval=FALSE}
+map(objeto, funcion)
+```
+
+o, dependiendo del tipo de salida:
+
+```{r, eval=FALSE}
+map_dbl(objeto, funcion)
+map_chr(objeto, funcion)
+map_lgl(objeto, funcion)
+map_int(objeto, funcion)
+```
+
+## 1.2 `map()` devuelve una lista
+
+La función `map()` siempre devuelve una lista.
+
+```{r}
+map(mtcars, mean)
+```
+
+Aunque cada resultado sea un solo número, la salida se guarda como lista.
+
+Podemos verificarlo:
+
+```{r}
+resultado <- map(mtcars, mean)
+
+class(resultado)
+```
+
+Esto puede ser útil cuando la salida de cada iteración no tiene necesariamente la misma longitud o el mismo tipo.
+
+Por ejemplo:
+
+```{r}
+x <- list(
+  a = 1:5,
+  b = c(10, 20),
+  c = c(3, 4, 5, 6)
+)
+
+map(x, summary)
+```
+
+Cada `summary()` produce un objeto con varios valores. Por eso es natural guardar todo en una lista.
+
+## 1.3 `map_dbl()` devuelve un vector numérico
+
+Cuando sabemos que cada resultado será un número decimal, usamos `map_dbl()`.
+
+Por ejemplo, para calcular medias:
+
+```{r}
+map_dbl(mtcars, mean)
+```
+
+Para calcular medianas:
+
+```{r}
+map_dbl(mtcars, median)
+```
+
+Para calcular desviaciones estándar:
+
+```{r}
+map_dbl(mtcars, sd)
+```
+
+La ventaja de `map_dbl()` es que exige que cada resultado sea un número. Si alguna función devuelve algo que no puede convertirse en número, R mostrará un error.
+
+Esto es bueno porque ayuda a detectar problemas.
+
+## 1.4 `map_chr()` devuelve texto
+
+La función `map_chr()` se usa cuando esperamos que cada resultado sea texto.
+
+Por ejemplo, podemos obtener la clase de cada columna de `iris`.
+
+```{r}
+map_chr(iris, class)
+```
+
+Aquí se aplica `class()` a cada columna de `iris`.
+
+Como la salida de `class()` es texto, usamos `map_chr()`.
+
+## 1.5 `map_lgl()` devuelve valores lógicos
+
+La función `map_lgl()` devuelve un vector lógico, es decir, un vector formado por valores `TRUE` o `FALSE`.
+
+Por ejemplo, podemos preguntar qué columnas de `iris` son numéricas.
+
+```{r}
+map_lgl(iris, is.numeric)
+```
+
+El resultado indica, para cada columna, si es numérica o no.
+
+También podemos preguntar qué columnas son factores.
+
+```{r}
+map_lgl(iris, is.factor)
+```
+
+Esta instrucción es útil cuando queremos filtrar columnas.
+
+Por ejemplo, podemos seleccionar solo las columnas numéricas de `iris`:
+
+```{r}
+iris_num <- iris[map_lgl(iris, is.numeric)]
+
+head(iris_num)
+```
+
+## 1.6 `map_int()` devuelve enteros
+
+La función `map_int()` se usa cuando esperamos resultados enteros.
+
+Por ejemplo, podemos contar cuántos valores diferentes tiene cada columna de `iris`.
+
+```{r}
+map_int(iris, ~ length(unique(.)))
+```
+
+Aquí aparece una nueva forma de escribir funciones: la fórmula con `~`.
+
+La expresión:
+
+```{r, eval=FALSE}
+~ length(unique(.))
+```
+
+significa:
+
+> toma cada elemento, represéntalo con `.`, calcula sus valores únicos y cuenta cuántos hay.
+
+En este caso, `.` representa la columna actual.
+
+## 1.7 Uso de funciones anónimas
+
+A veces no queremos aplicar directamente una función existente, sino una operación más personalizada.
+
+Por ejemplo, queremos calcular el rango de cada columna de `mtcars`, es decir, máximo menos mínimo.
+
+Con una función anónima tradicional:
+
+```{r}
+map_dbl(mtcars, function(x) {
+  max(x) - min(x)
+})
+```
+
+Con la sintaxis abreviada de `purrr`:
+
+```{r}
+map_dbl(mtcars, ~ max(.) - min(.))
+```
+
+En esta segunda forma:
+
+- `~` indica que estamos creando una función anónima;
+- `.` representa el elemento actual;
+- `max(.) - min(.)` se aplica a cada columna.
+
+## 1.8 Pasar argumentos adicionales
+
+Algunas funciones necesitan argumentos adicionales.
+
+Por ejemplo, supongamos que tenemos valores faltantes.
+
+```{r}
+df <- tibble(
+  a = c(1, 2, NA, 4),
+  b = c(10, NA, 30, 40),
+  c = c(5, 6, 7, NA)
+)
+
+df
+```
+
+Si usamos `mean()` directamente:
+
+```{r}
+map_dbl(df, mean)
+```
+
+El resultado contiene `NA`, porque las columnas tienen valores faltantes.
+
+Podemos pasar el argumento `na.rm = TRUE`:
+
+```{r}
+map_dbl(df, mean, na.rm = TRUE)
+```
+
+Esto significa:
+
+> aplica `mean()` a cada columna, pero en cada aplicación usa también `na.rm = TRUE`.
+
+Es equivalente a escribir:
+
+```{r, eval=FALSE}
+mean(df$a, na.rm = TRUE)
+mean(df$b, na.rm = TRUE)
+mean(df$c, na.rm = TRUE)
+```
+
+## 1.9 Extraer elementos por nombre
+
+Una de las ventajas de `map()` es que también permite trabajar con listas complejas.
+
+Por ejemplo, ajustemos un modelo lineal para cada grupo de cilindros en `mtcars`.
+
+```{r}
+modelos <- mtcars %>%
+  split(.$cyl) %>%
+  map(~ lm(mpg ~ wt, data = .))
+
+modelos
+```
+
+Aquí ocurre lo siguiente:
+
+1. `split(.$cyl)` divide `mtcars` según el número de cilindros.
+2. `map()` aplica un modelo lineal a cada subconjunto.
+3. En cada subconjunto se ajusta `lm(mpg ~ wt, data = .)`.
+
+Ahora podemos obtener el resumen de cada modelo.
+
+```{r}
+resumenes <- map(modelos, summary)
+
+resumenes
+```
+
+Si queremos extraer el valor de `r.squared` de cada resumen, podemos escribir:
+
+```{r}
+map_dbl(resumenes, "r.squared")
+```
+
+La expresión:
+
+```{r, eval=FALSE}
+map_dbl(resumenes, "r.squared")
+```
+
+significa:
+
+> de cada elemento de la lista `resumenes`, extrae el componente llamado `r.squared`.
+
+También podríamos escribirlo así:
+
+```{r}
+map_dbl(resumenes, ~ .$r.squared)
+```
+
+Ambas formas dan el mismo resultado.
+
+## 1.10 Comparación entre `for`, `lapply()` y `map()`
+
+Las tres opciones siguientes hacen una tarea similar.
+
+Con `for`:
+
+```{r}
+salida <- vector("double", length(mtcars))
+names(salida) <- names(mtcars)
+
+for (i in seq_along(mtcars)) {
+  salida[[i]] <- mean(mtcars[[i]])
+}
+
+salida
+```
+
+Con `lapply()`:
+
+```{r}
+lapply(mtcars, mean)
+```
+
+Con `map_dbl()`:
+
+```{r}
+map_dbl(mtcars, mean)
+```
+
+La diferencia principal es la salida:
+
+- `for` permite mucho control, pero requiere más código.
+- `lapply()` siempre devuelve una lista.
+- `map_dbl()` devuelve directamente un vector numérico.
+
+En ciencia de datos, `map()` y sus variantes son muy útiles porque permiten escribir iteraciones de forma compacta y clara.
+
+# 2. Manejo de errores al iterar
+
+Cuando aplicamos una función muchas veces, puede pasar que una de las iteraciones falle.
+
+Por ejemplo, la función `log()` calcula logaritmos, pero necesita valores numéricos.
+
+```{r}
+log(10)
+```
+
+Pero si intentamos calcular:
+
+```{r, error=TRUE}
+log("a")
+```
+
+obtenemos un error, porque `"a"` no es un valor numérico.
+
+Ahora imaginemos que tenemos una lista con varios elementos:
+
+```{r}
+x <- list(1, 10, "a", 100)
+```
+
+Si intentamos aplicar `log()` con `map()`:
+
+```{r, error=TRUE}
+map(x, log)
+```
+
+El problema es que una sola entrada mala, `"a"`, detiene todo el proceso.
+
+Para evitar esto, `purrr` ofrece herramientas para manejar errores.
+
+## 2.1 La función `safely()`
+
+La función `safely()` transforma una función normal en una función segura.
+
+Por ejemplo:
+
+```{r}
+log_seguro <- safely(log)
+```
+
+Ahora `log_seguro()` no se detiene cuando ocurre un error.
+
+```{r}
+log_seguro(10)
+```
+
+```{r}
+log_seguro("a")
+```
+
+La salida de `safely()` siempre es una lista con dos elementos:
+
+- `result`: contiene el resultado si la función funcionó;
+- `error`: contiene el error si la función falló.
+
+Si no hubo error, `error` será `NULL`.
+
+Si hubo error, `result` será `NULL`.
+
+## 2.2 Usar `safely()` con `map()`
+
+Ahora apliquemos `log_seguro()` a toda la lista `x`.
+
+```{r}
+x <- list(1, 10, "a", 100)
+
+resultado <- map(x, log_seguro)
+
+resultado
+```
+
+Cada elemento de `resultado` contiene una lista con `result` y `error`.
+
+Podemos observar su estructura:
+
+```{r}
+str(resultado)
+```
+
+Este tipo de salida es útil porque no perdemos los resultados que sí funcionaron.
+
+## 2.3 Separar resultados y errores
+
+La función `transpose()` permite reorganizar la salida.
+
+```{r}
+resultado_transpuesto <- transpose(resultado)
+
+resultado_transpuesto
+```
+
+Ahora tenemos una lista con dos partes principales:
+
+- una lista de resultados;
+- una lista de errores.
+
+Podemos extraer los resultados:
+
+```{r}
+resultado_transpuesto$result
+```
+
+Y también los errores:
+
+```{r}
+resultado_transpuesto$error
+```
+
+## 2.4 Identificar qué elementos funcionaron
+
+Podemos detectar cuáles iteraciones no produjeron error.
+
+```{r}
+funciono <- map_lgl(resultado_transpuesto$error, is.null)
+
+funciono
+```
+
+Esto devuelve `TRUE` cuando no hubo error y `FALSE` cuando sí hubo error.
+
+Podemos ver los elementos originales que fallaron:
+
+```{r}
+x[!funciono]
+```
+
+También podemos ver los resultados que sí funcionaron:
+
+```{r}
+resultado_transpuesto$result[funciono]
+```
+
+Si queremos convertirlos en un vector numérico:
+
+```{r}
+resultado_transpuesto$result[funciono] %>%
+  flatten_dbl()
+```
+
+## 2.5 La función `possibly()`
+
+La función `possibly()` es una alternativa más simple a `safely()`.
+
+En lugar de devolver el error, permite indicar un valor por defecto cuando ocurre un error.
+
+Por ejemplo:
+
+```{r}
+log_posible <- possibly(log, otherwise = NA_real_)
+```
+
+Esto significa:
+
+> intenta aplicar `log()`, pero si ocurre un error, devuelve `NA_real_`.
+
+Ahora:
+
+```{r}
+log_posible(10)
+```
+
+```{r}
+log_posible("a")
+```
+
+Si lo usamos con `map_dbl()`:
+
+```{r}
+x <- list(1, 10, "a", 100)
+
+map_dbl(x, log_posible)
+```
+
+Aquí obtenemos un vector numérico. En la posición correspondiente a `"a"` aparece `NA`.
+
+Esta estrategia es muy útil cuando queremos continuar el análisis aunque algunos elementos fallen.
+
+## 2.6 Diferencia entre `safely()` y `possibly()`
+
+La diferencia principal es esta:
+
+| Función | ¿Qué hace cuando hay error? |
+|---|---|
+| `safely()` | Guarda el resultado y también el error |
+| `possibly()` | Devuelve un valor por defecto |
+
+Usamos `safely()` cuando queremos inspeccionar qué salió mal.
+
+Usamos `possibly()` cuando solo queremos reemplazar los errores por un valor definido, como `NA`.
+
+## 2.7 La función `quietly()`
+
+A veces una función no produce errores, pero sí genera advertencias, mensajes o impresiones en pantalla.
+
+Por ejemplo:
+
+```{r, warning=TRUE}
+log(-1)
+```
+
+Esto no produce un error como tal, pero sí produce una advertencia porque el logaritmo de un número negativo no es real en los números reales.
+
+La función `quietly()` captura:
+
+- resultado;
+- salida impresa;
+- advertencias;
+- mensajes.
+
+```{r}
+log_silencioso <- quietly(log)
+
+log_silencioso(10)
+```
+
+```{r}
+log_silencioso(-1)
+```
+
+La salida contiene varios elementos:
+
+- `result`: resultado de la función;
+- `output`: texto impreso;
+- `warnings`: advertencias;
+- `messages`: mensajes.
+
+## 2.8 Usar `quietly()` con `map()`
+
+Consideremos esta lista:
+
+```{r}
+valores <- list(1, -1, 10, -5)
+```
+
+Aplicamos `log()` de forma silenciosa:
+
+```{r}
+salida <- map(valores, quietly(log))
+
+salida
+```
+
+Podemos extraer las advertencias:
+
+```{r}
+map(salida, "warnings")
+```
+
+Y podemos extraer los resultados:
+
+```{r}
+map(salida, "result")
+```
+
+Esto es útil cuando queremos revisar qué iteraciones generaron advertencias sin interrumpir el flujo de trabajo.
+
+# 3. Ejercicios 
+
+## Ejercicio 1
+
+Usa `map_dbl()` para calcular la media de cada columna de `mtcars`.
+
+```{r}
+map_dbl(mtcars, mean)
+```
+
+
+## Ejercicio 2
+
+Usa `map_dbl()` para calcular la desviación estándar de cada columna de `mtcars`.
+
+```{r}
+map_dbl(mtcars, sd)
+```
+
+
+## Ejercicio 3
+
+Usa `map_chr()` para obtener la clase de cada columna de `iris`.
+
+```{r}
+map_chr(iris, class)
+```
+
+
+## Ejercicio 4
+
+Usa `map_lgl()` para determinar qué columnas de `iris` son numéricas.
+
+```{r}
+map_lgl(iris, is.numeric)
+```
+
+
+## Ejercicio 5
+
+Usa `map_int()` para calcular el número de valores únicos en cada columna de `iris`.
+
+```{r}
+map_int(iris, ~ length(unique(.)))
+```
+
+
+## Ejercicio 6
+
+Usa `map_dbl()` para calcular el rango de cada columna de `mtcars`, definido como:
+
+\[
+\max(x) - \min(x).
+\]
+
+```{r}
+map_dbl(mtcars, ~ (max(.) - min(.)))
+```
+
+
+## Ejercicio 7
+
+Crea una lista con los valores `1`, `10`, `"a"` y `100`. Usa `safely()` para aplicar `log()` sin que el proceso se detenga.
+
+```{r}
+lista <- list(1, 10, "a", 100)
+
+logaritmo <- safely(log)
+
+resultado <- map(lista, logaritmo)
+resultado
+```
+
+
+## Ejercicio 8
+
+Usa el resultado del ejercicio anterior para identificar cuáles elementos produjeron error.
+
+```{r}
+transpuesto <- transpose(resultado)
+
+funciona <- map_lgl(transpuesto$error, (is.null))
+
+!funciona
+```
+
+
+## Ejercicio 9
+
+Usa `possibly()` para aplicar `log()` a la lista `x <- list(1, 10, "a", 100)`. Cuando ocurra un error, debe devolver `NA`.
+
+```{r}
+x <- list(1, 10, "a", 100)
+
+log_poss <- possibly(log, otherwise = NA)
+
+map(x, log_poss)
+```
+
+
+
+## Ejercicio 10
+
+Usa `quietly()` para aplicar `log()` a los valores `1`, `-1`, `10` y `-5`. Luego extrae las advertencias generadas.
+
+```{r}
+numeros <- list(1, -1, 10, -5)
+
+logaritmos <- map(numeros, quietly(log))
+
+map(logaritmos, "warnings")
+```
+

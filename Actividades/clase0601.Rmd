@@ -1,0 +1,855 @@
+---
+title: 'Unidad III: Mapeo sobre múltiples argumentos y otros patrones de iteración'
+author: "Cristian J. Herrera"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: '3'
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r setup, message=FALSE, warning=FALSE}
+library(purrr)
+library(dplyr)
+library(tibble)
+```
+
+# Introducción
+
+En los temas anteriores estudiamos cómo usar las funciones `map()` para aplicar una misma función a muchos elementos.
+
+Por ejemplo:
+
+```{r}
+map_dbl(mtcars, mean)
+```
+
+Ese código aplica `mean()` a cada columna de `mtcars`.
+
+Sin embargo, en algunos problemas necesitamos iterar sobre **más de un argumento al mismo tiempo**.
+
+Por ejemplo, podríamos querer generar números aleatorios usando diferentes medias y diferentes desviaciones estándar.
+
+También existen otros patrones de iteración útiles, como:
+
+- aplicar una función por sus efectos secundarios;
+- conservar o eliminar elementos según una condición;
+- verificar si alguna o todas las entradas cumplen cierta condición;
+- reducir una lista a un solo objeto.
+
+En este documento estudiaremos los últimos dos temas de la unidad:
+
+1. Mapeo sobre múltiples argumentos.
+2. Otros patrones de bucles `for`.
+
+# 1. Mapeo sobre múltiples argumentos
+
+Hasta ahora hemos usado `map()` para recorrer un solo objeto.
+
+Por ejemplo:
+
+```{r}
+medias <- list(5, 10, -3)
+
+map(medias, rnorm, n = 5)
+```
+
+En este caso, `map()` toma cada valor de `medias` y lo usa como argumento de `rnorm()`.
+
+El código anterior es parecido a escribir:
+
+```{r, eval=FALSE}
+rnorm(n = 5, mean = 5)
+rnorm(n = 5, mean = 10)
+rnorm(n = 5, mean = -3)
+```
+
+Aquí estamos variando un solo argumento: la media.
+
+Pero a veces queremos variar dos o más argumentos al mismo tiempo.
+
+## 1.1 La función `map2()`
+
+La función `map2()` sirve para iterar sobre dos objetos en paralelo.
+
+Su estructura general es:
+
+```{r, eval=FALSE}
+map2(.x, .y, .f)
+```
+
+donde:
+
+- `.x` es el primer objeto que queremos recorrer;
+- `.y` es el segundo objeto que queremos recorrer;
+- `.f` es la función que queremos aplicar.
+
+Por ejemplo, supongamos que queremos generar muestras normales con diferentes medias y diferentes desviaciones estándar.
+
+```{r}
+medias <- list(5, 10, -3)
+desviaciones <- list(1, 5, 10)
+
+simulaciones <- map2(
+  medias,
+  desviaciones,
+  rnorm,
+  n = 5
+)
+
+simulaciones
+```
+
+Aquí ocurre lo siguiente:
+
+```{r, eval=FALSE}
+rnorm(n = 5, mean = 5,  sd = 1)
+rnorm(n = 5, mean = 10, sd = 5)
+rnorm(n = 5, mean = -3, sd = 10)
+```
+
+Es decir, `map2()` toma el primer valor de `medias` con el primer valor de `desviaciones`, luego el segundo con el segundo, y así sucesivamente.
+
+## 1.2 Ejemplo con una función personalizada
+
+Supongamos que tenemos dos vectores:
+
+```{r}
+x <- c(10, 20, 30)
+y <- c(1, 2, 3)
+```
+
+Queremos restar elemento a elemento:
+
+```{r}
+map2_dbl(x, y, function(a, b) {
+  a - b
+})
+```
+
+También podemos escribirlo con la sintaxis abreviada:
+
+```{r}
+map2_dbl(x, y, ~ .x - .y)
+```
+
+En esta sintaxis:
+
+- `.x` representa el elemento actual del primer vector;
+- `.y` representa el elemento actual del segundo vector.
+
+Por lo tanto:
+
+```{r}
+map2_dbl(x, y, ~ .x - .y)
+```
+
+equivale a:
+
+```{r, eval=FALSE}
+10 - 1
+20 - 2
+30 - 3
+```
+
+## 1.3 `map2()` con columnas de una tabla
+
+También podemos usar `map2()` dentro de un `tibble`.
+
+Supongamos que tenemos información de varios grupos:
+
+```{r}
+grupos <- tibble(
+  grupo = c("A", "B", "C"),
+  minimo = c(0, 10, 100),
+  maximo = c(1, 20, 200)
+)
+
+grupos
+```
+
+Queremos calcular la diferencia entre `maximo` y `minimo`.
+
+```{r}
+grupos <- grupos %>%
+  mutate(
+    amplitud = map2_dbl(maximo, minimo, ~ .x - .y)
+  )
+
+grupos
+```
+
+Aquí:
+
+- `.x` representa cada valor de `maximo`;
+- `.y` representa cada valor de `minimo`;
+- `.x - .y` calcula la diferencia.
+
+## 1.4 La función `pmap()`
+
+La función `map2()` funciona bien cuando tenemos dos argumentos que cambian.
+
+Pero si tenemos tres o más argumentos que cambian, usamos `pmap()`.
+
+La función `pmap()` recibe una lista de argumentos.
+
+Por ejemplo, supongamos que queremos generar muestras normales variando:
+
+- el tamaño de muestra `n`;
+- la media `mean`;
+- la desviación estándar `sd`.
+
+```{r}
+parametros <- tibble(
+  n = c(5, 5, 5),
+  mean = c(0, 10, 100),
+  sd = c(1, 2, 10)
+)
+
+parametros
+```
+
+Podemos usar `pmap()`:
+
+```{r}
+simulaciones <- parametros %>%
+  pmap(rnorm)
+
+simulaciones
+```
+
+Esto genera llamadas equivalentes a:
+
+```{r, eval=FALSE}
+rnorm(n = 5, mean = 0,   sd = 1)
+rnorm(n = 5, mean = 10,  sd = 2)
+rnorm(n = 5, mean = 100, sd = 10)
+```
+
+Una ventaja importante de usar un `tibble` es que los argumentos tienen nombre. Por eso `pmap()` sabe que la columna `n` corresponde al argumento `n`, la columna `mean` al argumento `mean` y la columna `sd` al argumento `sd`.
+
+## 1.5 `pmap()` con una función personalizada
+
+También podemos usar `pmap()` con una función creada por nosotros.
+
+Supongamos que tenemos una tabla con datos de productos:
+
+```{r}
+productos <- tibble(
+  producto = c("A", "B", "C"),
+  precio = c(10, 25, 40),
+  cantidad = c(3, 2, 5),
+  descuento = c(0.1, 0.2, 0.15)
+)
+
+productos
+```
+
+Queremos calcular el total después del descuento:
+
+\[
+\text{total} = \text{precio} \times \text{cantidad} \times (1 - \text{descuento})
+\]
+
+Usamos `pmap_dbl()`:
+
+```{r}
+productos <- productos %>%
+  mutate(
+    total = pmap_dbl(
+      list(precio, cantidad, descuento),
+      function(precio, cantidad, descuento) {
+        precio * cantidad * (1 - descuento)
+      }
+    )
+  )
+
+productos
+```
+
+También se puede escribir con la sintaxis abreviada:
+
+```{r}
+productos <- tibble(
+  producto = c("A", "B", "C"),
+  precio = c(10, 25, 40),
+  cantidad = c(3, 2, 5),
+  descuento = c(0.1, 0.2, 0.15)
+)
+
+productos <- productos %>%
+  mutate(
+    total = pmap_dbl(
+      list(precio, cantidad, descuento),
+      ~ ..1 * ..2 * (1 - ..3)
+    )
+  )
+
+productos
+```
+
+En esta sintaxis:
+
+- `..1` representa el primer argumento;
+- `..2` representa el segundo argumento;
+- `..3` representa el tercer argumento.
+
+Sin embargo, para estudiantes suele ser más claro usar la versión con `function()`.
+
+## 1.6 Diferencia entre `map()`, `map2()` y `pmap()`
+
+Podemos resumirlo así:
+
+| Función | ¿Cuántas entradas recorremos? | Ejemplo |
+|---|---:|---|
+| `map()` | Una entrada | aplicar `mean()` a cada columna |
+| `map2()` | Dos entradas en paralelo | combinar media y desviación |
+| `pmap()` | Tres o más entradas | usar `n`, `mean` y `sd` juntos |
+
+Ejemplo con `map()`:
+
+```{r}
+map_dbl(mtcars, mean)
+```
+
+Ejemplo con `map2()`:
+
+```{r}
+map2_dbl(c(10, 20, 30), c(1, 2, 3), ~ .x - .y)
+```
+
+Ejemplo con `pmap()`:
+
+```{r}
+datos <- tibble(
+  a = c(1, 2, 3),
+  b = c(10, 20, 30),
+  c = c(100, 200, 300)
+)
+
+datos %>%
+  pmap_dbl(function(a, b, c) {
+    a + b + c
+  })
+```
+
+# 2. Otros patrones de bucles `for`
+
+Además de `map()`, `map2()` y `pmap()`, el paquete `purrr` ofrece otras funciones que representan patrones comunes de iteración.
+
+En esta sección estudiaremos:
+
+- `walk()`;
+- `keep()` y `discard()`;
+- `some()` y `every()`;
+- `detect()` y `detect_index()`;
+- `reduce()` y `accumulate()`.
+
+## 2.1 La función `walk()`
+
+La función `walk()` se parece a `map()`, pero se usa cuando nos interesa la acción que realiza la función, no el objeto que devuelve.
+
+Por ejemplo, si queremos imprimir los elementos de una lista:
+
+```{r}
+x <- list(1, "a", 3)
+
+walk(x, print)
+```
+
+Aquí lo importante es que `print()` imprime cada elemento en pantalla.
+
+La diferencia conceptual es:
+
+```{r, eval=FALSE}
+map(x, print)
+```
+
+devuelve una lista con resultados.
+
+Mientras que:
+
+```{r, eval=FALSE}
+walk(x, print)
+```
+
+se usa principalmente por el efecto secundario de imprimir.
+
+## 2.2 Ejemplo con nombres
+
+Supongamos que queremos imprimir un mensaje para cada columna de `iris`.
+
+```{r}
+walk(names(iris), function(nombre) {
+  print(paste("La columna se llama:", nombre))
+})
+```
+
+Este tipo de operación no busca crear una nueva tabla o vector. Solo busca mostrar mensajes.
+
+Por eso `walk()` es una buena opción.
+
+## 2.3 `keep()` y `discard()`
+
+Las funciones `keep()` y `discard()` sirven para conservar o eliminar elementos de acuerdo con una condición.
+
+La condición debe ser una función que devuelva `TRUE` o `FALSE`.
+
+Por ejemplo, en `iris`, algunas columnas son numéricas y una columna es factor.
+
+```{r}
+map_lgl(iris, is.numeric)
+```
+
+Si queremos conservar solo las columnas numéricas, usamos `keep()`:
+
+```{r}
+iris_numericas <- iris %>%
+  keep(is.numeric)
+
+head(iris_numericas)
+```
+
+Si queremos eliminar las columnas numéricas y conservar las no numéricas, usamos `discard()`:
+
+```{r}
+iris_no_numericas <- iris %>%
+  discard(is.numeric)
+
+head(iris_no_numericas)
+```
+
+En resumen:
+
+```{r, eval=FALSE}
+keep(x, condicion)
+```
+
+conserva los elementos donde la condición es `TRUE`.
+
+```{r, eval=FALSE}
+discard(x, condicion)
+```
+
+elimina los elementos donde la condición es `TRUE`.
+
+## 2.4 `some()` y `every()`
+
+Las funciones `some()` y `every()` sirven para verificar condiciones sobre una colección de elementos.
+
+`some()` pregunta:
+
+> ¿Algún elemento cumple la condición?
+
+`every()` pregunta:
+
+> ¿Todos los elementos cumplen la condición?
+
+Por ejemplo:
+
+```{r}
+x <- list(1:5, letters, list(10))
+```
+
+Preguntamos si algún elemento es de tipo carácter:
+
+```{r}
+some(x, is.character)
+```
+
+Preguntamos si todos los elementos son vectores:
+
+```{r}
+every(x, is.vector)
+```
+
+Ahora veamos un ejemplo con `iris`.
+
+```{r}
+some(iris, is.factor)
+```
+
+Esto pregunta si alguna columna de `iris` es factor.
+
+```{r}
+every(iris, is.numeric)
+```
+
+Esto pregunta si todas las columnas de `iris` son numéricas.
+
+Como `Species` no es numérica, el resultado es `FALSE`.
+
+## 2.5 `detect()` y `detect_index()`
+
+La función `detect()` encuentra el primer elemento que cumple una condición.
+
+La función `detect_index()` devuelve la posición del primer elemento que cumple una condición.
+
+Por ejemplo:
+
+```{r}
+valores <- c(3, 5, 8, 2, 10)
+
+detect(valores, ~ . > 6)
+```
+
+El primer valor mayor que 6 es `8`.
+
+Ahora buscamos su posición:
+
+```{r}
+detect_index(valores, ~ . > 6)
+```
+
+La posición de `8` es `3`.
+
+También podemos usarlo con una lista.
+
+```{r}
+lista <- list(
+  a = c("uno", "dos"),
+  b = c(1, 2, 3),
+  c = c(TRUE, FALSE)
+)
+
+detect(lista, is.numeric)
+```
+
+Esto devuelve el primer elemento numérico.
+
+```{r}
+detect_index(lista, is.numeric)
+```
+
+Esto devuelve la posición del primer elemento numérico.
+
+## 2.6 `head_while()` y `tail_while()`
+
+Las funciones `head_while()` y `tail_while()` conservan elementos desde el inicio o desde el final mientras se cumpla una condición.
+
+Por ejemplo:
+
+```{r}
+valores <- c(8, 7, 6, 3, 9, 10)
+
+head_while(valores, ~ . > 5)
+```
+
+Este código toma valores desde el inicio mientras sean mayores que 5.
+
+El resultado es:
+
+```{r, eval=FALSE}
+8, 7, 6
+```
+
+Se detiene cuando encuentra `3`, porque `3 > 5` es falso.
+
+Ahora desde el final:
+
+```{r}
+tail_while(valores, ~ . > 5)
+```
+
+Este código toma valores desde el final mientras sean mayores que 5.
+
+En este caso toma `9` y `10`.
+
+## 2.7 La función `reduce()`
+
+La función `reduce()` sirve para combinar muchos elementos hasta obtener uno solo.
+
+Por ejemplo, supongamos que tenemos varios vectores y queremos encontrar los elementos comunes a todos.
+
+```{r}
+vectores <- list(
+  c(1, 3, 5, 6, 10),
+  c(1, 2, 3, 7, 8, 10),
+  c(1, 2, 3, 4, 8, 9, 10)
+)
+
+reduce(vectores, intersect)
+```
+
+Aquí `intersect()` se aplica repetidamente hasta encontrar la intersección común.
+
+La idea es parecida a:
+
+```{r, eval=FALSE}
+intersect(
+  intersect(vectores[[1]], vectores[[2]]),
+  vectores[[3]]
+)
+```
+
+Otro ejemplo: sumar elementos de una lista.
+
+```{r}
+numeros <- list(1, 2, 3, 4, 5)
+
+reduce(numeros, `+`)
+```
+
+Esto equivale a:
+
+```{r, eval=FALSE}
+((((1 + 2) + 3) + 4) + 5)
+```
+
+## 2.8 Reducir varias tablas
+
+Una aplicación muy útil de `reduce()` ocurre cuando tenemos varias tablas y queremos unirlas.
+
+Por ejemplo:
+
+```{r}
+tabla_edad <- tibble(
+  nombre = c("Ana", "Luis"),
+  edad = c(20, 25)
+)
+
+tabla_notas <- tibble(
+  nombre = c("Ana", "Luis"),
+  nota = c(8.5, 9.2)
+)
+
+tabla_grupo <- tibble(
+  nombre = c("Ana", "Luis"),
+  grupo = c("A", "B")
+)
+
+tablas <- list(tabla_edad, tabla_notas, tabla_grupo)
+
+reduce(tablas, full_join, by = "nombre")
+```
+
+Aquí `reduce()` aplica `full_join()` repetidamente hasta combinar todas las tablas en una sola.
+
+## 2.9 La función `accumulate()`
+
+La función `accumulate()` es parecida a `reduce()`, pero conserva los resultados intermedios.
+
+Por ejemplo:
+
+```{r}
+numeros <- c(1, 2, 3, 4, 5)
+
+accumulate(numeros, `+`)
+```
+
+El resultado es la suma acumulada:
+
+```{r, eval=FALSE}
+1
+1 + 2
+1 + 2 + 3
+1 + 2 + 3 + 4
+1 + 2 + 3 + 4 + 5
+```
+
+Es decir:
+
+```{r, eval=FALSE}
+1, 3, 6, 10, 15
+```
+
+También podemos usarlo con multiplicación:
+
+```{r}
+accumulate(numeros, `*`)
+```
+
+Esto devuelve el producto acumulado.
+
+# 3. Ejercicios
+
+## Ejercicio 1
+
+Usa `map2_dbl()` para sumar elemento a elemento los siguientes vectores:
+
+```{r, eval=FALSE}
+x <- c(10, 20, 30, 40)
+y <- c(1, 2, 3, 4)
+```
+
+```{r}
+map2_dbl(x, y, ~ .x + .y)
+```
+
+---
+
+## Ejercicio 2
+
+Usa `map2_dbl()` para calcular el área de varios rectángulos. Usa los siguientes vectores:
+
+```{r, eval=FALSE}
+base <- c(2, 5, 10, 4)
+altura <- c(3, 2, 6, 8)
+```
+
+La fórmula es:
+
+\[
+\text{área} = \text{base} \times \text{altura}.
+\]
+
+```{r}
+area <- map2_dbl(
+  base,
+  altura,
+  ~ .x * .y)
+area
+```
+
+
+---
+
+## Ejercicio 3
+
+Crea un `tibble` con tres columnas: `precio`, `cantidad` y `descuento`.
+
+Luego usa `pmap_dbl()` para calcular el total pagado, usando la fórmula:
+
+\[
+\text{total} = \text{precio} \times \text{cantidad} \times (1 - \text{descuento}).
+\]
+
+```{r}
+set.seed(7)
+datos <- tibble(
+  precio = sample(10:100, 5),
+  cantidad = sample(1:10, 5, replace = TRUE), 
+  descuento = sample(0:30, 5, replace = TRUE)/100
+  )
+
+
+datos <- datos %>%
+  mutate(
+    total = pmap_dbl(
+      list(precio, cantidad, descuento),
+      ~ ..1 * ..2 * (1 - ..3)
+    )
+  )
+
+print(datos)
+
+```
+
+
+---
+
+## Ejercicio 4
+
+Usa `map2()` para generar muestras normales con las siguientes medias y desviaciones estándar:
+
+```{r, eval=FALSE}
+medias <- list(0, 10, 100)
+desviaciones <- list(1, 2, 10)
+```
+
+Cada muestra debe tener tamaño 5.
+
+```{r}
+muestras <- map2(
+  medias,
+  desviaciones,
+  rnorm,
+  n = 5
+)
+
+muestras
+```
+
+
+---
+
+## Ejercicio 5
+
+Usa `keep()` para conservar únicamente las columnas numéricas de `iris`.
+
+```{r}
+head(keep(iris, ~ is.numeric(.)))
+```
+
+
+---
+
+## Ejercicio 6
+
+Usa `discard()` para eliminar las columnas numéricas de `iris`.
+
+```{r}
+head(discard(iris, ~ is.numeric(.)))
+```
+
+
+---
+
+## Ejercicio 7
+
+Usa `some()` y `every()` para responder:
+
+1. ¿Alguna columna de `iris` es factor?
+
+```{r}
+some(iris, is.factor)
+```
+
+2. ¿Todas las columnas de `iris` son numéricas?
+
+```{r}
+every(iris, is.numeric)
+```
+
+
+---
+
+## Ejercicio 8
+
+Usa `detect()` y `detect_index()` para encontrar el primer valor mayor que 50 en el siguiente vector:
+
+```{r, eval=FALSE}
+valores <- c(10, 20, 45, 60, 80, 5)
+```
+
+```{r}
+detect(valores, ~ . > 50)
+detect_index(valores, ~ . > 50)
+```
+
+---
+
+## Ejercicio 9
+
+Usa `reduce()` para encontrar los valores comunes en todos los vectores de la siguiente lista:
+
+```{r, eval=FALSE}
+vectores <- list(
+  c(1, 2, 3, 4, 5),
+  c(2, 3, 5, 7),
+  c(0, 2, 3, 5, 9)
+)
+```
+
+```{r}
+reduce(vectores, intersect)
+```
+
+
+---
+
+## Ejercicio 10
+
+Usa `accumulate()` para calcular la suma acumulada del siguiente vector:
+
+```{r, eval=FALSE}
+numeros <- c(5, 10, 15, 20)
+```
+
+```{r}
+accumulate(numeros, sum)
+```
+

@@ -1,0 +1,133 @@
+---
+title: "Tarea 2"
+author: "Cristian Josue Herrera"
+output:
+  pdf_document: default
+  html_document: default
+---
+# Tarea 2: Iteraciones con purrr
+
+## Indicaciones generales
+
+
+En los siguientes ejercicios se integran las herramientas vistas en la Unidad III:
+
+- bucles `for`;
+- funciones de orden superior;
+- `map()`, `map_dbl()`, `map_chr()`, `map_lgl()`;
+- `safely()`, `possibly()` y `quietly()`;
+- `map2()` y `pmap()`;
+- `keep()`, `discard()`, `some()`, `every()`, `detect()`, `reduce()` y `accumulate()`.
+
+Para resolverlos debes cargar los paquetes:
+
+```{r setup, message=FALSE, warning=FALSE}
+library(purrr)
+library(dplyr)
+library(tibble)
+```
+
+
+---
+
+## Ejercicio 1
+
+Simula datos normales usando distintas combinaciones de media, desviación estándar y tamaño de muestra.
+
+Crea el siguiente data frame de parámetros:
+
+```{r, eval=FALSE}
+parametros <- tibble(
+  mean = c(0, 5, 10, 100),
+  sd = c(1, 2, 5, 10),
+  n = c(10, 20, 30, 40)
+)
+```
+
+Luego:
+
+1. Usa `pmap()` para generar las simulaciones.
+2. Calcula la media observada de cada simulación.
+3. Calcula la desviación estándar observada de cada simulación.
+4. Guarda todo en un nuevo data frame.
+
+### Solución
+
+```{r}
+simulaciones <- parametros %>%
+  pmap(rnorm)
+
+medias <- simulaciones %>%
+  map_dbl(mean)
+desviaciones <- simulaciones %>%
+  map_dbl(sd)
+
+resultado <- tibble(
+  medias, 
+  desviaciones
+  )
+
+resultado
+```
+
+---
+
+## Ejercicio 2
+
+Usa la base de datos `mtcars`.
+
+Haz lo siguiente:
+
+1. Selecciona únicamente las columnas numéricas de `mtcars`.
+2. Crea una lista de funciones resumen con:
+   - media;
+   - mediana;
+   - desviación estándar;
+   - mínimo;
+   - máximo;
+   - rango, definido como máximo menos mínimo.
+3. Aplica cada función resumen a cada columna numérica.
+4. Construye un data frame donde:
+   - cada fila sea una variable;
+   - cada columna sea una medida resumen.
+5. Además, identifica:
+   - si todas las columnas seleccionadas son numéricas;
+   - si alguna columna tiene desviación estándar mayor que 100;
+   - cuál es la primera variable cuyo rango es mayor que 300.
+
+```{r}
+mtcars_numeric <- mtcars %>%
+  keep(is.numeric)
+
+funciones <- list(
+  media    = mean,
+  mediana  = median,
+  desv_est = sd,
+  minimo   = min,
+  maximo   = max,
+  rango    = function(x) max(x) - min(x)
+)
+
+resumen <- map_dfr(mtcars_numeric, function(x) {
+  map_df(funciones, function(funcion) funcion(x))
+}) %>% 
+  mutate(variable = names(mtcars_numeric)) %>% 
+  select(variable, everything())
+
+resumen
+
+col_numerica <- mtcars_numeric %>%
+  every(is.numeric)
+col_numerica
+
+desv_mayor_100 <- mtcars_numeric %>%
+  some(~ sd(.x) > 100)
+desv_mayor_100
+
+var_rango <- mtcars_numeric %>% 
+  detect(~ (max(.x) - min(.x)) > 300) %>%
+  names()
+var_rango
+```
+
+En respuesta a "cuál es la primera variable cuyo rango es mayor que 300", no hay variable con rango mayor a 300, por ello el código devuelve NULL.

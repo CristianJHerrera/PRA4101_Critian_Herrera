@@ -1,0 +1,389 @@
+---
+title: 'Proyecto 2'
+author: "Cristian J. Herrera"
+output:
+  pdf_document: default
+  html_document: default
+---
+# Proyecto Unidad III
+
+## Auditoría automatizada de bases de datos para reportes empresariales
+
+---
+
+# 1. Contexto del problema
+
+En una empresa de análisis de datos es común recibir varias bases de datos provenientes de distintas áreas: ventas, transporte, producción, inventarios o estudios técnicos.
+
+Antes de hacer análisis avanzados, es necesario revisar la calidad de cada base de datos. Por ejemplo:
+
+- identificar qué columnas son numéricas;
+- detectar valores faltantes;
+- calcular medidas resumen;
+- revisar si hay columnas con poca variabilidad;
+- encontrar posibles errores;
+- comparar variables entre sí;
+- generar reportes automáticos.
+
+En este proyecto se construirá un sistema sencillo de auditoría de datos usando únicamente herramientas de iteración en R.
+
+
+---
+
+# 2. Bases de datos a utilizar
+
+Usaremos bases de datos conocidas que vienen incluidas en R:
+
+```{r}
+data(mtcars)
+data(cars)
+data(iris)
+data(airquality)
+```
+
+## Descripción breve de las bases
+
+### `mtcars`
+
+Contiene información de automóviles, como consumo de combustible, peso, potencia y número de cilindros.
+
+### `cars`
+
+Contiene información sobre velocidad y distancia de frenado de automóviles.
+
+### `iris`
+
+Contiene mediciones de flores de tres especies distintas.
+
+### `airquality`
+
+Contiene mediciones de calidad del aire en Nueva York, incluyendo ozono, radiación solar, viento y temperatura.
+
+---
+
+# 3. Objetivo general
+
+Diseñar un sistema de auditoría automática que reciba varias bases de datos conocidas y genere reportes resumen usando herramientas de iteración en R.
+
+---
+
+# 4. Objetivos específicos
+
+1. Crear funciones que identifiquen columnas numéricas y no numéricas.
+2. Calcular medidas resumen para todas las columnas numéricas de varias bases de datos.
+3. Detectar columnas con valores faltantes.
+4. Aplicar funciones de manera segura usando manejo de errores.
+5. Comparar pares de variables numéricas usando `map2()`.
+6. Combinar reportes parciales usando `reduce()`.
+7. Construir una tabla final que resuma el estado de cada base de datos.
+
+---
+
+# 5. Paquetes permitidos
+
+Se recomienda cargar solo estos paquetes:
+
+```{r setup, message=FALSE, warning=FALSE}
+library(purrr)
+library(dplyr)
+library(tibble)
+```
+
+---
+
+# 6. Estructura del proyecto
+
+El proyecto se divide en seis partes.
+
+# Parte 1. Preparación de las bases de datos
+
+Crea una lista llamada `bases` que contenga las 4 bases de datos.
+
+Luego verifica:
+
+1. Cuántas filas tiene cada base.
+2. Cuántas columnas tiene cada base.
+3. Qué clase tiene cada base.
+
+
+---
+
+# Parte 2. Auditoría de tipos de variables
+
+Para cada base de datos, identifica:
+
+1. Cuántas columnas son numéricas.
+2. Cuántas columnas no son numéricas.
+3. Si todas las columnas son numéricas.
+4. Si existe al menos una columna no numérica.
+
+
+---
+
+# Parte 3. Reporte automático de columnas numéricas
+
+Para cada base de datos, conserva únicamente las columnas numéricas.
+
+Después, para cada columna numérica calcula:
+
+1. media;
+2. mediana;
+3. desviación estándar;
+4. mínimo;
+5. máximo;
+6. rango.
+
+Debes ignorar valores faltantes usando `na.rm = TRUE`.
+
+
+---
+
+# Parte 4. Manejo de errores en auditoría
+
+En la industria, las bases de datos no siempre vienen limpias. Algunas columnas pueden tener texto, valores faltantes o estructuras inesperadas.
+
+Crea una función llamada `media_segura()` que intente calcular la media de una columna. Si no se puede calcular, debe devolver `NA`.
+
+Luego aplícala a todas las columnas de cada base de datos, no solo a las numéricas.
+
+## Ejemplo conceptual
+
+Si se aplica a `iris`, las columnas numéricas deben devolver una media, pero la columna `Species` debe devolver `NA`.
+
+---
+
+# Parte 5. Comparación entre pares de variables
+
+En algunos reportes empresariales se necesita comparar pares de variables.
+
+Por ejemplo:
+
+- en `cars`, comparar `dist` contra `speed`;
+- en `iris`, comparar `Petal.Length` contra `Sepal.Length`;
+- en `iris`, comparar `Petal.Width` contra `Sepal.Width`;
+- en `mtcars`, comparar `hp` contra `mpg`;
+- en `airquality`, comparar `Temp` contra `Wind`.
+
+Crea una tabla llamada `comparaciones` con esta estructura:
+
+```{r}
+comparaciones <- tibble(
+  base = c("cars", "iris", "iris", "mtcars", "airquality"),
+  variable_1 = c("dist", "Petal.Length", "Petal.Width", "hp", "Temp"),
+  variable_2 = c("speed", "Sepal.Length", "Sepal.Width", "mpg", "Wind")
+)
+```
+
+Para cada fila, calcula:
+
+\[
+\text{diferencia de medias} = \bar{x}_1 - \bar{x}_2.
+\]
+
+También calcula:
+
+\[
+\text{razón de rangos} = \frac{\text{rango}(x_1)}{\text{rango}(x_2)}.
+\]
+
+
+---
+
+# Parte 6. Reporte final usando `reduce()`
+
+Al final debes construir un reporte general que combine varias tablas:
+
+1. tabla de dimensiones de cada base;
+2. tabla de tipos de variables;
+3. tabla de cantidad de valores faltantes;
+4. tabla resumen de columnas numéricas.
+
+El objetivo es obtener una tabla final donde cada base tenga información general sobre su calidad.
+
+---
+
+
+# 7. Preguntas de interpretación
+
+Responde brevemente:
+
+1. ¿Qué base tiene más valores faltantes?
+2. ¿Qué base tiene más columnas numéricas?
+3. ¿Qué variable tiene el mayor rango en todo el proyecto?
+4. ¿Hay alguna base cuyas columnas sean todas numéricas?
+5. ¿Qué comparación tiene la mayor diferencia de medias?
+
+---
+
+# 8. Comentario final
+
+Este proyecto simula una tarea real de la industria: construir un sistema básico de auditoría de datos.
+
+Antes de aplicar modelos avanzados, las empresas necesitan saber:
+
+- qué tipo de variables tienen;
+- si existen valores faltantes;
+- qué variables son numéricas;
+- cuáles tienen rangos grandes;
+- qué bases están listas para análisis;
+- dónde hay posibles problemas de calidad.
+
+
+# Solución
+
+## Preparación de las bases de datos.
+
+```{r}
+bases <- list(
+  mtcars = mtcars, 
+  cars = cars,
+  iris = iris,
+  airquality = airquality)
+
+dimension <- tibble(
+  base = names(bases),
+  filas = map_int(bases, nrow),
+  columnas = map_int(bases, ncol),
+  clase = map_chr(bases, ~ class(.x)[1])
+)
+
+dimension
+```
+
+
+## Auditoria de tipos de variables
+
+```{r}
+tipos_variables <- tibble(
+  base = names(bases),
+  col_num = map_int(
+    bases, ~ sum(map_lgl(.x, is.numeric))),
+  no_num = map_int(
+    bases, ~ sum(!map_lgl(.x, is.numeric))),
+  todas_numericas = map_lgl(bases, ~ every(.x, is.numeric)),
+  alguna_no_numerica = map_lgl(bases, ~ some(.x, ~ !is.numeric(.x)))
+)
+
+tipos_variables
+```
+
+## Reporte automático de columnas numéricas
+
+```{r}
+repor <- function(df, nombre_base) {
+  df_num <- keep(df, is.numeric)
+  
+  map_dfr(names(df_num), function(nombre_col) {
+    columna <- df_num[[nombre_col]]
+    
+    tibble(
+      base = nombre_base,
+      variable = nombre_col,
+      media = mean(columna, na.rm = TRUE),
+      mediana = median(columna, na.rm = TRUE),
+      desv_std = sd(columna, na.rm = TRUE),
+      minimo = min(columna, na.rm = TRUE),
+      maximo = max(columna, na.rm = TRUE),
+      rango = maximo - minimo
+    )
+  })
+}
+
+reportes <- map2(bases, names(bases), ~ repor(.x, .y))
+
+reportes
+
+```
+
+
+## Manejo de errores en auditoría
+
+```{r}
+media_segura <- possibly(function(x) mean(x, na.rm = TRUE), otherwise = NA_real_)
+
+reporte_medias <- map(bases, function(df) {
+  map_dbl(df, media_segura)
+})
+
+reporte_medias
+```
+
+
+## Comparación entre pares de variables
+
+```{r}
+comparaciones <- tibble(
+  base = c("cars", "iris", "iris", "mtcars", "airquality"),
+  variable_1 = c("dist", "Petal.Length", "Petal.Width", "hp", "Temp"),
+  variable_2 = c("speed", "Sepal.Length", "Sepal.Width", "mpg", "Wind")
+)
+
+resultados <- comparaciones %>%
+  mutate(
+    diferencia_medias = map2_dbl(base, seq_along(base), function(b, i) {
+      v1 <- bases[[b]][[variable_1[i]]]
+      v2 <- bases[[b]][[variable_2[i]]]
+      mean(v1, na.rm = TRUE) - mean(v2, na.rm = TRUE)
+    }),
+    razon_rangos = map2_dbl(base, seq_along(base), function(b, i) {
+      v1 <- bases[[b]][[variable_1[i]]]
+      v2 <- bases[[b]][[variable_2[i]]]
+      
+      rango_v1 <- max(v1, na.rm = TRUE) - min(v1, na.rm = TRUE)
+      rango_v2 <- max(v2, na.rm = TRUE) - min(v2, na.rm = TRUE)
+      
+      rango_v1 / rango_v2
+    })
+  )
+
+resultados
+```
+
+
+## Reporte final usando *reduce()*
+
+```{r}
+t1 <- dimension %>% select(base, filas, columnas)
+
+t2 <- tipos_variables %>% select(base, col_num, no_num)
+
+t3 <- tibble(
+  base = names(bases),
+  faltantes = map_int(bases, ~ sum(is.na(.x)))
+)
+
+t4 <- list_rbind(reportes) %>% 
+  group_by(base) %>%
+  summarise(prom_medias = mean(media, na.rm = TRUE), .groups = "drop")
+
+lista_reportes <- list(t1, t2, t3, t4)
+
+reduce(lista_reportes, left_join, by = "base")
+
+```
+
+
+## Preguntas de interpretación
+
+Responde brevemente:
+
+1. ¿Qué base tiene más valores faltantes?
+
+La base *airquality* es quien posee mayor cantidad de valores faltante, y es, de hecho, la única que muestra valores faltantes.
+
+2. ¿Qué base tiene más columnas numéricas?
+
+La base *mtcars* es quien posee mayor cantidad de columnas numéricas, siendo 11 en total.
+
+3. ¿Qué variable tiene el mayor rango en todo el proyecto?
+
+La variable *disp* de la base *mtcars* con un rango de **400.900**.
+
+4. ¿Hay alguna base cuyas columnas sean todas numéricas?
+
+Si, las bases *mtcars*, *cars* y *airquality* son bases que presentan todas sus columnas numéricas.
+
+5. ¿Qué comparación tiene la mayor diferencia de medias?
+
+Las variables *hp* con *mpg* de la base *mtcars* poseen la mayor diferencia de medias en su comparión entre variables.
+
